@@ -4,6 +4,7 @@ import warnings
 import base64
 from .config import DICT_CONFIG
 from requests import Session
+from requests.auth import HTTPBasicAuth
 from zeep import Client
 from zeep.transports import Transport
 from zeep.wsdl.utils import etree
@@ -11,6 +12,7 @@ from robot.api import logger
 from robot.api.deco import keyword
 from six import iteritems
 from urllib3.exceptions import InsecureRequestWarning
+from zeep.wsse import username
 
 logging.config.dictConfig(DICT_CONFIG)
 # hide warnings
@@ -26,7 +28,7 @@ class SoapLibrary:
         self.url = None
 
     @keyword("Create SOAP Client")
-    def create_soap_client(self, url, ssl_verify=True):
+    def create_soap_client(self, url, username, password, ssl_verify=True):
         """
         Loads a WSDL from the given URL and creates a Zeep client.
         List all Available operations/methods with INFO log level.
@@ -34,12 +36,15 @@ class SoapLibrary:
         *Input Arguments:*
         | *Name* | *Description* |
         | url | wsdl url |
+        | username | session username |
+        | password | session password |
 
         *Example:*
-        | Create SOAP Client | http://endpoint.com?wsdl |
+        | Create SOAP Client | Hostname?wsdl |
         """
         self.url = url
         session = Session()
+        session.auth = HTTPBasicAuth(username, password)
         session.verify = ssl_verify
         self.client = Client(self.url, transport=Transport(session=session))
         logger.info('Connected to: %s' % self.client.wsdl.location)
@@ -82,8 +87,6 @@ class SoapLibrary:
         Gets data from XML using a given tag. If the tag returns zero or more than one result, it will show a warning.
         The xml argument must be an etree object, can be used with the return of the keyword `Call SOAP Method With XML`.
 
-        Returns the string representation of the value.
-
         *Input Arguments:*
         | *Name* | *Description* |
         | xml | xml etree object |
@@ -92,8 +95,8 @@ class SoapLibrary:
 
         *Examples:*
         | ${response}= | Call SOAP Method With XML |  C:\\Request.xml |
-        | ${value}= | Get Data From XML By Tag |  ${response} | SomeTag |
-        | ${value}= | Get Data From XML By Tag |  ${response} | SomeTag | index=9 |
+        | Get Data From XML By Tag |  ${response} | SomeTag |
+        | Get Data From XML By Tag |  ${response} | SomeTag | index=9 |
         """
         new_index = index - 1
         xpath = self._parse_xpath(tag)
@@ -124,7 +127,7 @@ class SoapLibrary:
         | edited_request_name |  name of the new XMl file generated with the changed request |
 
         *Example*:
-        | ${dict}= | Create Dictionary | tag_name1=SomeText | tag_name2=OtherText |
+        | ${dict} | Create Dictionary | tag_name1=SomeText | tag_name2=OtherText |
         | ${xml_edited}= | Edit XML Request | request_filepath | ${dict} | New_Request |
         """
         string_xml = self._convert_xml_to_raw_text(xml_file_path)
@@ -193,10 +196,8 @@ class SoapLibrary:
     @keyword("Call SOAP Method")
     def call_soap_method(self, name, *args):
         """
-        If the webservice have simple SOAP operation/method with few arguments, you can call the method with the given
+        If the webservice have simple SOAP method with few arguments, you can call the method with the given
         `name` and `args`.
-
-        The first argument of the keyword  ``name``  is the operation name of the ``SOAP operation/method`` [https://www.soapui.org/soap-and-wsdl/operations-and-requests.html|More information here]
 
         *Input Arguments:*
         | *Name* | *Description* |
@@ -204,7 +205,7 @@ class SoapLibrary:
         | args | List of request entries |
 
         *Example:*
-        | ${response}= | Call SOAP Method | operation_name | arg1 | arg2 |
+        | ${response}= | Call SOAP Method | method_name | arg1 | arg2 |
         """
         method = getattr(self.client.service, name)
         response = method(*args)
@@ -214,8 +215,6 @@ class SoapLibrary:
     def decode_base64(self, response):
         """
         Decodes texts that are base64 encoded.
-
-        Returns the decoded response
 
         *Input Arguments:*
         | *Name* | *Description* |
